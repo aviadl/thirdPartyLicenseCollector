@@ -1,12 +1,10 @@
-package thirdpartylicensecollector
+package licensecollector
 
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"io/ioutil"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -18,20 +16,6 @@ const LicenseFileName = "THIRD_PARTY_LICENSE"
 
 //licenseMissing indicates that a license is missing
 var licenseMissing bool = false
-
-func main() {
-	tmpGoDir := flag.String("go-project", "", "project directory")
-	tmpNpmDir := flag.String("npm-project", "", "npm directory")
-	out := flag.String("out", LicenseFileName, "output file")
-	flag.Parse()
-	log.SetFlags(0)
-
-	err := Collect(*tmpGoDir, *tmpNpmDir, out)
-	if err != nil {
-		log.Println(err)
-		os.Exit(1)
-	}
-}
 
 //Collect collects licenses from npm and or go projects
 func Collect(projectGO, projcetNPM string, fileName string) error {
