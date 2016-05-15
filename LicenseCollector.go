@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"io/ioutil"
 	"log"
@@ -12,7 +13,8 @@ import (
 	"github.com/ryanuber/go-license"
 )
 
-var exitOnMissing bool
+//licenseMissing indicates that a license is missing
+var licenseMissing bool = false
 
 func main() {
 	tmpGoDir := flag.String("go-project", "", "project directory")
@@ -23,25 +25,38 @@ func main() {
 	licenseMap := map[string][]string{}
 	foundManualLicense := map[string]string{}
 
-	if len(*tmpGoDir) > 0 {
-		CollectGoLicenseFiles(*tmpGoDir, licenseMap, foundManualLicense)
+	err := Collect(*tmpGoDir, *tmpNpmDir, licenseMap, foundManualLicense)
+	if err != nil {
+		log.Println(err)
+		os.Exit(1)
 	}
-	if len(*tmpNpmDir) > 0 {
-		CollectNpmLicenseFiles(*tmpNpmDir, licenseMap, foundManualLicense)
-	}
-	if len(licenseMap)+len(foundManualLicense) > 0 {
-		ioutil.WriteFile(*out, []byte(generateLicenseFile(licenseMap, foundManualLicense)), 0644)
-	} else {
-		log.Println("No licenses handled")
-		exitOnMissing = true
-	}
-	if exitOnMissing {
+
+	err = ioutil.WriteFile(*out, []byte(generateLicenseFile(licenseMap, foundManualLicense)), 0644)
+	if err != nil {
+		log.Println(err)
 		os.Exit(1)
 	}
 }
 
-//CollectGoLicenseFiles ...
-func CollectGoLicenseFiles(tmpGoDir string, licenseMap map[string][]string, foundManualLicense map[string]string) error {
+//Collect collects licenses from npm and or go projects
+func Collect(projectGO, projcetNPM string, licenses map[string][]string, manualLicenses map[string]string) error {
+	licenseMissing = false
+	if len(projectGO) > 0 {
+		collectGoLicenseFiles(projectGO, licenses, manualLicenses)
+	}
+	if len(projcetNPM) > 0 {
+		collectNpmLicenseFiles(projcetNPM, licenses, manualLicenses)
+	}
+	if len(licenses)+len(manualLicenses) == 0 {
+		return errors.New("No licenses handled")
+	}
+	if licenseMissing {
+		return errors.New("License missing")
+	}
+	return nil
+}
+
+func collectGoLicenseFiles(tmpGoDir string, licenseMap map[string][]string, foundManualLicense map[string]string) error {
 	log.Println("Go Project dir: ", tmpGoDir)
 	dir := filepath.Join(tmpGoDir, "vendor")
 	fileName := filepath.Join(dir, "vendor.json")
@@ -68,8 +83,7 @@ func CollectGoLicenseFiles(tmpGoDir string, licenseMap map[string][]string, foun
 	return nil
 }
 
-//CollectNpmLicenseFiles ...
-func CollectNpmLicenseFiles(tmpNpmDir string, licenseMap map[string][]string, foundManualLicense map[string]string) error {
+func collectNpmLicenseFiles(tmpNpmDir string, licenseMap map[string][]string, foundManualLicense map[string]string) error {
 	log.Println("NPM Project dir: ", tmpNpmDir)
 	dir := filepath.Join(tmpNpmDir, "node_modules")
 	fileName := filepath.Join(tmpNpmDir, "package.json")
@@ -101,7 +115,7 @@ func doParseFile(dir, fileDir string, manualLicense map[string]string, licenseMa
 		lDir = lDir[len(dir)+1:]
 		if missing {
 			log.Println("Could not find license for ", lDir)
-			exitOnMissing = true
+			licenseMissing = true
 		}
 		if lType != "" {
 			arr := licenseMap[lType]
