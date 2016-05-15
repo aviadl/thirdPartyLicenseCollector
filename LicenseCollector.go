@@ -1,56 +1,72 @@
 package main
 
 import (
-"fmt"
-"github.com/ryanuber/go-license"
-	"flag"
-	"path/filepath"
-	"io/ioutil"
 	"encoding/json"
-	"strings"
+	"errors"
+	"flag"
+	"io/ioutil"
+	"log"
 	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/ryanuber/go-license"
 )
 
-var exitOnMissing bool
+//licenseMissing indicates that a license is missing
+var licenseMissing bool = false
 
 func main() {
 	tmpGoDir := flag.String("go-project", "", "project directory")
 	tmpNpmDir := flag.String("npm-project", "", "npm directory")
 	out := flag.String("out", "THIRD_PARTY_LICENSE", "output file")
 	flag.Parse()
-
+	log.SetFlags(0)
 	licenseMap := map[string][]string{}
 	foundManualLicense := map[string]string{}
 
-	if len(*tmpGoDir) > 0 {
-		collectGoLicenseFiles(*tmpGoDir, licenseMap, foundManualLicense)
+	err := Collect(*tmpGoDir, *tmpNpmDir, licenseMap, foundManualLicense)
+	if err != nil {
+		log.Println(err)
+		os.Exit(1)
 	}
-	if len(*tmpNpmDir) > 0 {
-		collectNpmLicenseFiles(*tmpNpmDir, licenseMap, foundManualLicense)
-	}
-	if len(licenseMap) + len(foundManualLicense) > 0 {
-		ioutil.WriteFile(*out, []byte(generateLicenseFile(licenseMap, foundManualLicense)), 0644)
-	} else {
-		fmt.Println("No licenses handled")
-		exitOnMissing = true
-	}
-	if exitOnMissing {
+
+	err = ioutil.WriteFile(*out, []byte(generateLicenseFile(licenseMap, foundManualLicense)), 0644)
+	if err != nil {
+		log.Println(err)
 		os.Exit(1)
 	}
 }
 
-func collectGoLicenseFiles(tmpGoDir string, licenseMap map[string][]string, foundManualLicense map[string]string) {
-	fmt.Println("Go Project dir: ", tmpGoDir)
+//Collect collects licenses from npm and or go projects
+func Collect(projectGO, projcetNPM string, licenses map[string][]string, manualLicenses map[string]string) error {
+	licenseMissing = false
+	if len(projectGO) > 0 {
+		collectGoLicenseFiles(projectGO, licenses, manualLicenses)
+	}
+	if len(projcetNPM) > 0 {
+		collectNpmLicenseFiles(projcetNPM, licenses, manualLicenses)
+	}
+	if len(licenses)+len(manualLicenses) == 0 {
+		return errors.New("No licenses handled")
+	}
+	if licenseMissing {
+		return errors.New("License missing")
+	}
+	return nil
+}
+
+func collectGoLicenseFiles(tmpGoDir string, licenseMap map[string][]string, foundManualLicense map[string]string) error {
+	log.Println("Go Project dir: ", tmpGoDir)
 	dir := filepath.Join(tmpGoDir, "vendor")
 	fileName := filepath.Join(dir, "vendor.json")
-	fmt.Println("Processing vendor file: ", fileName)
+	log.Println("Processing vendor file: ", fileName)
 	data, err := ioutil.ReadFile(fileName)
 	if err != nil {
-		fmt.Println(err)
-		fmt.Println("Failed processing go licenses")
-		return
+		log.Println(err)
+		log.Println("Failed processing go licenses")
+		return err
 	}
-
 
 	vendorMap := map[string]interface{}{}
 	err = json.Unmarshal(data, &vendorMap)
@@ -62,22 +78,22 @@ func collectGoLicenseFiles(tmpGoDir string, licenseMap map[string][]string, foun
 	for i := range packages {
 		p := packages[i].(map[string]interface{})
 		fileDir := p["path"].(string)
-		doParseFile(dir, fileDir,  manualLicense, licenseMap, foundManualLicense)
+		doParseFile(dir, fileDir, manualLicense, licenseMap, foundManualLicense)
 	}
+	return nil
 }
 
-func collectNpmLicenseFiles(tmpNpmDir string, licenseMap map[string][]string, foundManualLicense map[string]string) {
-	fmt.Println("NPM Project dir: ", tmpNpmDir)
+func collectNpmLicenseFiles(tmpNpmDir string, licenseMap map[string][]string, foundManualLicense map[string]string) error {
+	log.Println("NPM Project dir: ", tmpNpmDir)
 	dir := filepath.Join(tmpNpmDir, "node_modules")
 	fileName := filepath.Join(tmpNpmDir, "package.json")
-	fmt.Println("Processing package file: ", fileName)
+	log.Println("Processing package file: ", fileName)
 	data, err := ioutil.ReadFile(fileName)
 	if err != nil {
-		fmt.Println(err)
-		fmt.Println("Failed processing npm licenses")
-		return
+		log.Println(err)
+		log.Println("Failed processing npm licenses")
+		return err
 	}
-
 
 	packageMap := map[string]interface{}{}
 	err = json.Unmarshal(data, &packageMap)
@@ -87,18 +103,19 @@ func collectNpmLicenseFiles(tmpNpmDir string, licenseMap map[string][]string, fo
 
 	manualLicense := prepareManualLicense(tmpNpmDir)
 	for fileDir := range packages {
-		doParseFile(dir, fileDir,  manualLicense, licenseMap, foundManualLicense)
+		doParseFile(dir, fileDir, manualLicense, licenseMap, foundManualLicense)
 	}
+	return nil
 }
 
-func doParseFile(dir, fileDir string, manualLicense map[string]string, licenseMap map[string][]string, foundManualLicense map[string]string){
+func doParseFile(dir, fileDir string, manualLicense map[string]string, licenseMap map[string][]string, foundManualLicense map[string]string) {
 	lDir, license, missing := parseLicenseManual(fileDir, manualLicense)
 	if missing {
 		lDir, lType, missing := parseLicenseAuto(dir, fileDir)
 		lDir = lDir[len(dir)+1:]
 		if missing {
-			fmt.Println("Could not find license for ", lDir)
-			exitOnMissing = true
+			log.Println("Could not find license for ", lDir)
+			licenseMissing = true
 		}
 		if lType != "" {
 			arr := licenseMap[lType]
@@ -107,7 +124,7 @@ func doParseFile(dir, fileDir string, manualLicense map[string]string, licenseMa
 				licenseMap[lType] = arr
 			}
 		}
-	} else if len(license) > 0{
+	} else if len(license) > 0 {
 		//License can be either a single word, then we will check in the licenseMap
 		//If it is more than one word, we will simply place it there ...
 		if strings.Index(license, " ") == -1 {
@@ -132,14 +149,14 @@ func generateLicenseFile(lTypeMap map[string][]string, lContentMap map[string]st
 	for k, v := range lTypeMap {
 		fullLicense := licenseMap[k]
 		projects := ""
-		for _,p := range v {
-			projects += p +"\n"
+		for _, p := range v {
+			projects += p + "\n"
 		}
-		projects += fullLicense +"\n"
+		projects += fullLicense + "\n"
 		res += projects
 	}
 	for project, fullLicense := range lContentMap {
-		res += project+"\n" +fullLicense+"\n"
+		res += project + "\n" + fullLicense + "\n"
 	}
 	return res
 }
@@ -157,11 +174,11 @@ func InStringSlice(slice []string, val string) bool {
 func parseLicenseAuto(dir, fileDir string) (lDir string, lType string, missing bool) {
 	// This case will work if there is a guessable license file in the
 	// current working directory.
-	dirs := strings.Split(fileDir,"/")
+	dirs := strings.Split(fileDir, "/")
 	currentDir := dir
 	missing = true
 	lDir = filepath.Join(dir, fileDir)
-	for i:= range dirs {
+	for i := range dirs {
 		currentDir = filepath.Join(currentDir, dirs[i])
 		l, err := license.NewFromDir(currentDir)
 		if err != nil {
@@ -170,17 +187,17 @@ func parseLicenseAuto(dir, fileDir string) (lDir string, lType string, missing b
 		missing = false
 		lType = l.Type
 		lDir = currentDir
-		break;
+		break
 	}
 	return
 }
 
 func prepareManualLicense(vendorDir string) map[string]string {
 	fileName := filepath.Join(vendorDir, "manualLicense.json")
-	fmt.Println("Processing manual license file: ", fileName)
+	log.Println("Processing manual license file: ", fileName)
 	data, err := ioutil.ReadFile(fileName)
 	if err != nil {
-		fmt.Println("No manual license file")
+		log.Println("No manual license file")
 		return map[string]string{}
 	}
 	licenseMap := map[string]string{}
@@ -190,18 +207,18 @@ func prepareManualLicense(vendorDir string) map[string]string {
 
 //parseLicenseManual will look for the manual license file index, to add files that cannot be found automatically
 func parseLicenseManual(dir string, manualFileMap map[string]string) (lDir string, lContent string, missing bool) {
-	dirs := strings.Split(dir,"/")
+	dirs := strings.Split(dir, "/")
 	currentDir := ""
 	missing = true
 	lDir = dir
-	for i:= range dirs {
+	for i := range dirs {
 		currentDir = filepath.Join(currentDir, dirs[i])
 		content, exists := manualFileMap[currentDir]
 		if exists {
 			missing = false
 			lContent = content
 			lDir = currentDir
-			break;
+			break
 		}
 	}
 	return

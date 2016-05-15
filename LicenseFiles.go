@@ -1,6 +1,6 @@
 package main
 
-func initLicenseMap() ( licenseMap map[string]string) {
+func initLicenseMap() (licenseMap map[string]string) {
 	licenseMap = make(map[string]string)
 	licenseMap["MIT"] = `
 	The MIT License (MIT)
@@ -158,7 +158,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Status API Training Shop Blog About
 `
-	licenseMap["MPL-2.0"]=`Mozilla Public License Version 2.0
+	licenseMap["MPL-2.0"] = `Mozilla Public License Version 2.0
 ==================================
 
 1. Definitions
