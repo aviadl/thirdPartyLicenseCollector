@@ -1,4 +1,4 @@
-package main
+package thirdpartylicensecollector
 
 import (
 	"encoding/json"
@@ -13,25 +13,20 @@ import (
 	"github.com/ryanuber/go-license"
 )
 
+//LicenseFileName is the default created license file name
+const LicenseFileName = "THIRD_PARTY_LICENSE"
+
 //licenseMissing indicates that a license is missing
 var licenseMissing bool = false
 
 func main() {
 	tmpGoDir := flag.String("go-project", "", "project directory")
 	tmpNpmDir := flag.String("npm-project", "", "npm directory")
-	out := flag.String("out", "THIRD_PARTY_LICENSE", "output file")
+	out := flag.String("out", LicenseFileName, "output file")
 	flag.Parse()
 	log.SetFlags(0)
-	licenseMap := map[string][]string{}
-	foundManualLicense := map[string]string{}
 
-	err := Collect(*tmpGoDir, *tmpNpmDir, licenseMap, foundManualLicense)
-	if err != nil {
-		log.Println(err)
-		os.Exit(1)
-	}
-
-	err = ioutil.WriteFile(*out, []byte(generateLicenseFile(licenseMap, foundManualLicense)), 0644)
+	err := Collect(*tmpGoDir, *tmpNpmDir, out)
 	if err != nil {
 		log.Println(err)
 		os.Exit(1)
@@ -39,19 +34,26 @@ func main() {
 }
 
 //Collect collects licenses from npm and or go projects
-func Collect(projectGO, projcetNPM string, licenses map[string][]string, manualLicenses map[string]string) error {
+func Collect(projectGO, projcetNPM string, fileName string) error {
+	licenseMap := map[string][]string{}
+	foundManualLicense := map[string]string{}
+
 	licenseMissing = false
 	if len(projectGO) > 0 {
-		collectGoLicenseFiles(projectGO, licenses, manualLicenses)
+		collectGoLicenseFiles(projectGO, licenseMap, foundManualLicense)
 	}
 	if len(projcetNPM) > 0 {
-		collectNpmLicenseFiles(projcetNPM, licenses, manualLicenses)
+		collectNpmLicenseFiles(projcetNPM, licenseMap, foundManualLicense)
 	}
-	if len(licenses)+len(manualLicenses) == 0 {
+	if len(licenseMap)+len(foundManualLicense) == 0 {
 		return errors.New("No licenses handled")
 	}
 	if licenseMissing {
 		return errors.New("License missing")
+	}
+	err := ioutil.WriteFile(fileName, []byte(generateLicenseFile(licenseMap, foundManualLicense)), 0644)
+	if err != nil {
+		return err
 	}
 	return nil
 }
