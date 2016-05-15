@@ -1,4 +1,4 @@
-package thirdpartylicensecollector
+package licensecollector
 
 func initLicenseMap() (licenseMap map[string]string) {
 	licenseMap = make(map[string]string)
