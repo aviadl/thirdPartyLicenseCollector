@@ -3,6 +3,7 @@ package licensecollector
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"path/filepath"
@@ -23,11 +24,15 @@ func Collect(projectGO, projcetNPM string, fileName string) error {
 	foundManualLicense := map[string]string{}
 
 	licenseMissing = false
+	var err error
 	if len(projectGO) > 0 {
-		collectGoLicenseFiles(projectGO, licenseMap, foundManualLicense)
+		err = collectGoLicenseFiles(projectGO, licenseMap, foundManualLicense)
 	}
 	if len(projcetNPM) > 0 {
-		collectNpmLicenseFiles(projcetNPM, licenseMap, foundManualLicense)
+		err = collectNpmLicenseFiles(projcetNPM, licenseMap, foundManualLicense)
+	}
+	if err != nil {
+		return err
 	}
 	if len(licenseMap)+len(foundManualLicense) == 0 {
 		return errors.New("No licenses handled")
@@ -35,7 +40,11 @@ func Collect(projectGO, projcetNPM string, fileName string) error {
 	if licenseMissing {
 		return errors.New("License missing")
 	}
-	err := ioutil.WriteFile(fileName, []byte(generateLicenseFile(licenseMap, foundManualLicense)), 0644)
+	fileData, err := generateLicenseFile(licenseMap, foundManualLicense)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(fileName, []byte(fileData), 0644)
 	if err != nil {
 		return err
 	}
@@ -129,11 +138,16 @@ func doParseFile(dir, fileDir string, manualLicense map[string]string, licenseMa
 	}
 }
 
-func generateLicenseFile(lTypeMap map[string][]string, lContentMap map[string]string) string {
+func generateLicenseFile(lTypeMap map[string][]string, lContentMap map[string]string) (string, error) {
 	licenseMap := initLicenseMap()
 	res := ""
+	wrongLicense := map[string][]string{}
 	for k, v := range lTypeMap {
-		fullLicense := licenseMap[k]
+		fullLicense, ok := licenseMap[k]
+		if !ok {
+			wrongLicense[k] = v
+			continue
+		}
 		projects := ""
 		for _, p := range v {
 			projects += p + "\n"
@@ -141,10 +155,17 @@ func generateLicenseFile(lTypeMap map[string][]string, lContentMap map[string]st
 		projects += fullLicense + "\n"
 		res += projects
 	}
+	if len(wrongLicense) > 0 {
+		errMsg := "Wrong license files for the following libs"
+		for k, v := range wrongLicense {
+			errMsg += "\n " + k + ": " + fmt.Sprintf("%v", v)
+		}
+		return "", fmt.Errorf(errMsg)
+	}
 	for project, fullLicense := range lContentMap {
 		res += project + "\n" + fullLicense + "\n"
 	}
-	return res
+	return res, nil
 }
 
 // InStringSlice checks if val string is in s slice, case insensitive.
