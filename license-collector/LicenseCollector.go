@@ -15,11 +15,13 @@ import (
 //LicenseFileName is the default created license file name
 const LicenseFileName = "THIRD_PARTY_LICENSE"
 
+const vendorGoModuleFile = "modules.txt"
+
 //licenseMissing indicates that a license is missing
-var licenseMissing bool = false
+var licenseMissing = false
 
 //Collect collects licenses from npm and or go projects
-func Collect(projectGO, projcetNPM string, fileName string) error {
+func Collect(projectGO, projectNPM string, fileName string) error {
 	licenseMap := map[string][]string{}
 	foundManualLicense := map[string]string{}
 
@@ -28,17 +30,17 @@ func Collect(projectGO, projcetNPM string, fileName string) error {
 	if len(projectGO) > 0 {
 		err = collectGoLicenseFiles(projectGO, licenseMap, foundManualLicense)
 	}
-	if len(projcetNPM) > 0 {
-		err = collectNpmLicenseFiles(projcetNPM, licenseMap, foundManualLicense)
+	if len(projectNPM) > 0 {
+		err = collectNpmLicenseFiles(projectNPM, licenseMap, foundManualLicense)
 	}
 	if err != nil {
 		return err
 	}
 	if len(licenseMap)+len(foundManualLicense) == 0 {
-		return errors.New("No licenses handled")
+		return errors.New("no licenses handled")
 	}
 	if licenseMissing {
-		return errors.New("License missing")
+		return errors.New("license missing")
 	}
 	fileData, err := generateLicenseFile(licenseMap, foundManualLicense)
 	if err != nil {
@@ -48,32 +50,40 @@ func Collect(projectGO, projcetNPM string, fileName string) error {
 	if err != nil {
 		return err
 	}
+	log.Printf("generated license with name %s\n", fileName)
 	return nil
 }
 
 func collectGoLicenseFiles(tmpGoDir string, licenseMap map[string][]string, foundManualLicense map[string]string) error {
-	log.Println("Go Project dir: ", tmpGoDir)
 	dir := filepath.Join(tmpGoDir, "vendor")
-	fileName := filepath.Join(dir, "vendor.json")
-	log.Println("Processing vendor file: ", fileName)
+	log.Println("Go Project dir: ", dir)
+	// test go modules
+	fileName := filepath.Join(dir, vendorGoModuleFile)
+	log.Println("Processing go module file: ", fileName)
 	data, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		log.Println(err)
-		log.Println("Failed processing go licenses")
-		return err
+		log.Printf("failed finding %s for third party packages. make sure you 'go mod vendor'\n", vendorGoModuleFile)
+	}
+	fileContent := string(data)
+
+	res := strings.Split(fileContent, "\n")
+	packageMap := make(map[string]string)
+	for i := range res {
+		line := strings.TrimSpace(res[i])
+		// take all packages.
+		if strings.Index(line, "#") != 0 {
+			continue
+		}
+		linePackage := strings.SplitN(line, " ", 3)[1]
+		if len(linePackage) > 0 {
+			packageMap[linePackage] = linePackage
+		}
 	}
 
-	vendorMap := map[string]interface{}{}
-	err = json.Unmarshal(data, &vendorMap)
-	//Get the package list
-	rawPackages := vendorMap["package"]
-	packages := rawPackages.([]interface{})
-
-	manualLicense := prepareManualLicense(dir)
-	for i := range packages {
-		p := packages[i].(map[string]interface{})
-		fileDir := p["path"].(string)
-		doParseFile(dir, fileDir, manualLicense, licenseMap, foundManualLicense)
+	manualLicense := prepareManualLicense(tmpGoDir)
+	for packagePath := range packageMap {
+		doParseFile(dir, packagePath, manualLicense, licenseMap, foundManualLicense)
 	}
 	return nil
 }
@@ -104,7 +114,7 @@ func collectNpmLicenseFiles(tmpNpmDir string, licenseMap map[string][]string, fo
 }
 
 func doParseFile(dir, fileDir string, manualLicense map[string]string, licenseMap map[string][]string, foundManualLicense map[string]string) {
-	lDir, license, missing := parseLicenseManual(fileDir, manualLicense)
+	lDir, licenseDescriptor, missing := parseLicenseManual(fileDir, manualLicense)
 	if missing {
 		lDir, lType, missing := parseLicenseAuto(dir, fileDir)
 		lDir = lDir[len(dir)+1:]
@@ -119,21 +129,21 @@ func doParseFile(dir, fileDir string, manualLicense map[string]string, licenseMa
 				licenseMap[lType] = arr
 			}
 		}
-	} else if len(license) > 0 {
+	} else if len(licenseDescriptor) > 0 {
 		//License can be either a single word, then we will check in the licenseMap
 		//If it is more than one word, we will simply place it there ...
-		if strings.Index(license, " ") == -1 {
-			arr, exists := licenseMap[license]
+		if strings.Index(licenseDescriptor, " ") == -1 {
+			arr, exists := licenseMap[licenseDescriptor]
 			if exists {
 				if !InStringSlice(arr, lDir) {
 					arr = append(arr, lDir)
-					licenseMap[license] = arr
+					licenseMap[licenseDescriptor] = arr
 				}
 			} else {
-				foundManualLicense[lDir] = license
+				foundManualLicense[lDir] = licenseDescriptor
 			}
 		} else {
-			foundManualLicense[lDir] = license
+			foundManualLicense[lDir] = licenseDescriptor
 		}
 	}
 }
