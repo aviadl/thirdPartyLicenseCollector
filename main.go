@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/aviadl/thirdPartyLicenseCollector/license-collector"
+	licensecollector "thirdPartyLicenseCollector/license-collector"
 )
 
 func main() {
