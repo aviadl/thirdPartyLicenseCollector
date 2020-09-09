@@ -65,7 +65,7 @@ func collectGoLicenseFiles(tmpGoDir string, licenseMap map[string][]string, foun
 
 	fileHandle, err := os.Open(fileName)
 	if err != nil {
-		log.Printf("Failed to read %s (error: %s)\n", fileName, err)
+		log.Printf("failed finding %s for third party packages (error: %s). make sure you 'go mod vendor'\n", fileName, err)
 		return err
 	}
 	defer fileHandle.Close()
