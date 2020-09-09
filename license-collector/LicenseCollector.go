@@ -1,11 +1,13 @@
 package licensecollector
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -60,24 +62,28 @@ func collectGoLicenseFiles(tmpGoDir string, licenseMap map[string][]string, foun
 	// test go modules
 	fileName := filepath.Join(dir, vendorGoModuleFile)
 	log.Println("Processing go module file: ", fileName)
-	data, err := ioutil.ReadFile(fileName)
-	if err != nil {
-		log.Println(err)
-		log.Printf("failed finding %s for third party packages. make sure you 'go mod vendor'\n", vendorGoModuleFile)
-	}
-	fileContent := string(data)
 
-	res := strings.Split(fileContent, "\n")
-	packageMap := make(map[string]string)
-	for i := range res {
-		line := strings.TrimSpace(res[i])
+	fileHandle, err := os.Open(fileName)
+	if err != nil {
+		log.Printf("Failed to read %s (error: %s)\n", fileName, err)
+		return err
+	}
+	defer fileHandle.Close()
+
+	packageMap := make(map[string]struct{})
+	fileScanner := bufio.NewScanner(fileHandle)
+	for fileScanner.Scan() {
+		line := strings.TrimSpace(fileScanner.Text())
 		// take all packages.
+		if strings.HasPrefix(line, "##") { // skip "## explicit" line which was added to modules.txt in GO 1.14
+			continue
+		}
 		if strings.Index(line, "#") != 0 {
 			continue
 		}
 		linePackage := strings.SplitN(line, " ", 3)[1]
 		if len(linePackage) > 0 {
-			packageMap[linePackage] = linePackage
+			packageMap[linePackage] = struct{}{}
 		}
 	}
 
