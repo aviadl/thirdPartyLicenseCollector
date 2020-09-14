@@ -1,4 +1,3 @@
-module github.com/demisto/thirdPartyLicenseCollector
 
 go 1.12
 
