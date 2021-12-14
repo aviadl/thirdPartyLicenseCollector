@@ -68,7 +68,7 @@ func collectGoLicenseFiles(tmpGoDir string, licenseMap map[string][]string, foun
 		log.Printf("failed finding %s for third party packages. make sure you 'go mod vendor'\n", vendorGoModuleFile)
 		return err
 	}
-	defer fileHandle.Close()
+	defer func() { _ = fileHandle.Close() }()
 
 	packageMap := make(map[string]struct{})
 	fileScanner := bufio.NewScanner(fileHandle)
@@ -87,7 +87,10 @@ func collectGoLicenseFiles(tmpGoDir string, licenseMap map[string][]string, foun
 		}
 	}
 
-	manualLicense := prepareManualLicense(tmpGoDir)
+	manualLicense, err := prepareManualLicense(tmpGoDir)
+	if err != nil {
+		return err
+	}
 	for packagePath := range packageMap {
 		doParseFile(dir, packagePath, manualLicense, licenseMap, foundManualLicense)
 	}
@@ -112,7 +115,10 @@ func collectNpmLicenseFiles(tmpNpmDir string, licenseMap map[string][]string, fo
 	rawPackages := packageMap["dependencies"]
 	packages := rawPackages.(map[string]interface{})
 
-	manualLicense := prepareManualLicense(tmpNpmDir)
+	manualLicense, err := prepareManualLicense(tmpNpmDir)
+	if err != nil {
+		return err
+	}
 	for fileDir := range packages {
 		doParseFile(dir, fileDir, manualLicense, licenseMap, foundManualLicense)
 	}
@@ -215,17 +221,20 @@ func parseLicenseAuto(dir, fileDir string) (lDir string, lType string, missing b
 	return
 }
 
-func prepareManualLicense(vendorDir string) map[string]string {
+func prepareManualLicense(vendorDir string) (map[string]string, error) {
 	fileName := filepath.Join(vendorDir, "manualLicense.json")
 	log.Println("Processing manual license file: ", fileName)
 	data, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		log.Println("No manual license file")
-		return map[string]string{}
+		return map[string]string{}, nil
 	}
 	licenseMap := map[string]string{}
 	err = json.Unmarshal(data, &licenseMap)
-	return licenseMap
+	if err != nil {
+		log.Printf("Failed parsing license file with error [%s]\n", err)
+	}
+	return licenseMap, err
 }
 
 //parseLicenseManual will look for the manual license file index, to add files that cannot be found automatically
