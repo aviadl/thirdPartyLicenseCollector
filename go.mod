@@ -1,4 +1,4 @@
-module github.com/demisto/thirdPartyLicenseCollector
+module github.com/aviadl/thirdPartyLicenseCollector
 
 go 1.12
 
