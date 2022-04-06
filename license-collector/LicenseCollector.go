@@ -16,14 +16,14 @@ import (
 
 //LicenseFileName is the default created license file name
 const LicenseFileName = "THIRD_PARTY_LICENSE"
-
+const DefaultLicenseFileFormat = "txt"
 const vendorGoModuleFile = "modules.txt"
 
 //licenseMissing indicates that a license is missing
 var licenseMissing = false
 
 //Collect collects licenses from npm and or go projects
-func Collect(projectGO, projectNPM string, fileName string) error {
+func Collect(projectGO, projectNPM string, fileName string, fileFormat string) error {
 	licenseMap := map[string][]string{}
 	foundManualLicense := map[string]string{}
 
@@ -44,11 +44,11 @@ func Collect(projectGO, projectNPM string, fileName string) error {
 	if licenseMissing {
 		return errors.New("license missing")
 	}
-	fileData, err := generateLicenseFile(licenseMap, foundManualLicense)
+	fileData, err := generateLicenseFile(licenseMap, foundManualLicense, fileFormat)
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(fileName, []byte(fileData), 0644)
+	err = ioutil.WriteFile(fileName, fileData, 0644)
 	if err != nil {
 		return err
 	}
@@ -144,6 +144,9 @@ func doParseFile(dir, fileDir string, manualLicense map[string]string, licenseMa
 	} else if len(licenseDescriptor) > 0 {
 		//License can be either a single word, then we will check in the licenseMap
 		//If it is more than one word, we will simply place it there ...
+		if licenseDescriptor == "ignore" {
+			return
+		}
 		if strings.Index(licenseDescriptor, " ") == -1 {
 			arr, exists := licenseMap[licenseDescriptor]
 			if exists {
@@ -160,9 +163,10 @@ func doParseFile(dir, fileDir string, manualLicense map[string]string, licenseMa
 	}
 }
 
-func generateLicenseFile(lTypeMap map[string][]string, lContentMap map[string]string) (string, error) {
+func generateLicenseFile(lTypeMap map[string][]string, lContentMap map[string]string, format string) ([]byte, error) {
 	licenseMap := initLicenseMap()
 	res := ""
+	jsonRes := map[string]string{}
 	wrongLicense := map[string][]string{}
 	for k, v := range lTypeMap {
 		fullLicense, ok := licenseMap[k]
@@ -173,6 +177,7 @@ func generateLicenseFile(lTypeMap map[string][]string, lContentMap map[string]st
 		projects := ""
 		for _, p := range v {
 			projects += p + "\n"
+			jsonRes[p] = fullLicense
 		}
 		projects += fullLicense + "\n"
 		res += projects
@@ -182,12 +187,29 @@ func generateLicenseFile(lTypeMap map[string][]string, lContentMap map[string]st
 		for k, v := range wrongLicense {
 			errMsg += "\n " + k + ": " + fmt.Sprintf("%v", v)
 		}
-		return "", fmt.Errorf(errMsg)
+		var errRes []byte
+		if format == "json" {
+			errRes = []byte("{}")
+		} else {
+			errRes = []byte("")
+		}
+		return errRes, fmt.Errorf(errMsg)
 	}
 	for project, fullLicense := range lContentMap {
 		res += project + "\n" + fullLicense + "\n"
+		jsonRes[project] = fullLicense
 	}
-	return res, nil
+	var bRes []byte
+	if format == "json" {
+		var err error
+		bRes, err = json.Marshal(jsonRes)
+		if err != nil {
+			return []byte("{}"), err
+		}
+	} else {
+		bRes = []byte(res)
+	}
+	return bRes, nil
 }
 
 // InStringSlice checks if val string is in s slice, case insensitive.
