@@ -39,7 +39,7 @@ func Collect(projectGO, projectNPM string, fileName string, fileFormat string) e
 		return err
 	}
 	if len(licenseMap)+len(foundManualLicense) == 0 {
-		return errors.New("no licenses handled")
+		return nil
 	}
 	if licenseMissing {
 		return errors.New("license missing")
