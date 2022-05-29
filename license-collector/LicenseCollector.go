@@ -110,10 +110,13 @@ func collectNpmLicenseFiles(tmpNpmDir string, licenseMap map[string][]string, fo
 	}
 
 	packageMap := map[string]interface{}{}
-	err = json.Unmarshal(data, &packageMap)
+	_ = json.Unmarshal(data, &packageMap)
 	//Get the package list
-	rawPackages := packageMap["dependencies"]
-	packages := rawPackages.(map[string]interface{})
+	rawPackages, ok := packageMap["dependencies"]
+	var packages map[string]interface{}
+	if ok {
+		packages = rawPackages.(map[string]interface{})
+	}
 
 	manualLicense, err := prepareManualLicense(tmpNpmDir)
 	if err != nil {
