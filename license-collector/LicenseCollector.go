@@ -14,16 +14,16 @@ import (
 	"github.com/ryanuber/go-license"
 )
 
-//LicenseFileName is the default created license file name
+// LicenseFileName is the default created license file name
 const LicenseFileName = "THIRD_PARTY_LICENSE"
 const DefaultLicenseFileFormat = "txt"
 const vendorGoModuleFile = "modules.txt"
 
-//licenseMissing indicates that a license is missing
+// licenseMissing indicates that a license is missing
 var licenseMissing = false
 
-//Collect collects licenses from npm and or go projects
-func Collect(projectGO, projectNPM string, fileName string, fileFormat string) error {
+// Collect collects licenses from npm and or go projects
+func Collect(projectGO, projectNPM string, projectNodeModules string, fileName string, fileFormat string) error {
 	licenseMap := map[string][]string{}
 	foundManualLicense := map[string]string{}
 
@@ -33,7 +33,7 @@ func Collect(projectGO, projectNPM string, fileName string, fileFormat string) e
 		err = collectGoLicenseFiles(projectGO, licenseMap, foundManualLicense)
 	}
 	if len(projectNPM) > 0 {
-		err = collectNpmLicenseFiles(projectNPM, licenseMap, foundManualLicense)
+		err = collectNpmLicenseFiles(projectNPM, projectNodeModules, licenseMap, foundManualLicense)
 	}
 	if err != nil {
 		return err
@@ -97,9 +97,13 @@ func collectGoLicenseFiles(tmpGoDir string, licenseMap map[string][]string, foun
 	return nil
 }
 
-func collectNpmLicenseFiles(tmpNpmDir string, licenseMap map[string][]string, foundManualLicense map[string]string) error {
+func collectNpmLicenseFiles(tmpNpmDir string, tmpNodeModulesDir string, licenseMap map[string][]string, foundManualLicense map[string]string) error {
 	log.Println("NPM Project dir: ", tmpNpmDir)
-	dir := filepath.Join(tmpNpmDir, "node_modules")
+	nodeModulesDir := tmpNpmDir
+	if len(tmpNodeModulesDir) > 0 {
+		nodeModulesDir = tmpNodeModulesDir
+	}
+	dir := filepath.Join(nodeModulesDir, "node_modules")
 	fileName := filepath.Join(tmpNpmDir, "package.json")
 	log.Println("Processing package file: ", fileName)
 	data, err := ioutil.ReadFile(fileName)
@@ -262,7 +266,7 @@ func prepareManualLicense(vendorDir string) (map[string]string, error) {
 	return licenseMap, err
 }
 
-//parseLicenseManual will look for the manual license file index, to add files that cannot be found automatically
+// parseLicenseManual will look for the manual license file index, to add files that cannot be found automatically
 func parseLicenseManual(dir string, manualFileMap map[string]string) (lDir string, lContent string, missing bool) {
 	dirs := strings.Split(dir, "/")
 	currentDir := ""
